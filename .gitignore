@@ -1,0 +1,12 @@
+/build/
+/cmake-build-*/
+
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*_autogen/
+CMakeUserPresets.json
+
+*.user
+*.pro.user
