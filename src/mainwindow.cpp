@@ -52,49 +52,53 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::buildInterface()
 {
     setWindowTitle("KamKontroller | Camera controls");
-    setMinimumSize(820, 560);
-    resize(1120, 760);
+    setMinimumSize(700, 460);
+    resize(940, 620);
     setStyleSheet(R"(
-        QWidget { color: #202723; font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 13px; }
-        QMainWindow, #mainPane { background: #f4f5f1; }
-        #sidebar { background: #202b27; }
-        #sidebar QLabel { color: #edf1e9; }
-        #brand { color: #d9ed77; font-size: 15px; font-weight: 700; }
-        #eyebrow { color: #77827b; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-        #sidebar #eyebrow { color: #a1b0a5; }
-        #pageTitle { color: #202723; font-size: 27px; font-weight: 700; }
-        #cameraName { color: #202723; font-size: 15px; font-weight: 700; }
-        #cameraPath { color: #77827b; font-family: monospace; font-size: 12px; }
-        #sectionTitle { color: #35423b; font-size: 13px; font-weight: 700; }
+        QWidget { color: #dce5df; background: #151a18; font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 12px; }
+        QMainWindow, #mainPane { background: #191f1c; }
+        #sidebar { background: #101513; border-right: 1px solid #29342e; }
+        #sidebar QLabel { color: #dce5df; background: transparent; }
+        #brand { color: #c6e36b; font-size: 14px; font-weight: 700; }
+        #eyebrow { color: #84958b; font-size: 9px; font-weight: 700; }
+        #sidebar #eyebrow { color: #9baa9f; }
+        #pageTitle { color: #edf3ee; font-size: 22px; font-weight: 700; }
+        #cameraName { color: #e6eee8; font-size: 13px; font-weight: 700; }
+        #cameraPath { color: #91a098; font-family: monospace; font-size: 11px; }
+        #sectionTitle { color: #dce5df; font-size: 12px; font-weight: 700; }
         QComboBox, QSpinBox, QLineEdit {
-            background: #ffffff; border: 1px solid #d9dfd8; border-radius: 4px;
-            padding: 7px 9px; min-height: 19px;
+            background: #202824; color: #e3ebe5; border: 1px solid #39463f; border-radius: 3px;
+            padding: 4px 7px; min-height: 18px; selection-background-color: #506331;
         }
-        QComboBox:focus, QSpinBox:focus, QLineEdit:focus { border-color: #788c40; }
-        #sidebar QComboBox { background: #303c36; color: #f2f4ef; border-color: #4a5850; }
-        QComboBox::drop-down { border: 0; width: 25px; }
+        QComboBox:focus, QSpinBox:focus, QLineEdit:focus { border-color: #9ab84c; }
+        #sidebar QComboBox { background: #1b2420; color: #e3ebe5; border-color: #35423a; }
+        QComboBox::drop-down { background: transparent; border: 0; width: 22px; }
+        QComboBox QAbstractItemView { background: #202824; color: #e3ebe5; border: 1px solid #39463f; selection-background-color: #40532c; }
+        QSpinBox::up-button, QSpinBox::down-button { background: #29332d; border: 0; width: 15px; }
         QPushButton {
-            background: #e2ebbd; color: #293321; border: 1px solid #cfdda0;
-            border-radius: 4px; padding: 8px 12px; font-weight: 700;
+            background: #2b382d; color: #d8e8ad; border: 1px solid #485b37;
+            border-radius: 3px; padding: 6px 9px; font-weight: 700;
         }
-        QPushButton:hover { background: #d4e398; }
-        QPushButton:disabled { color: #8b938c; background: #e7eae5; border-color: #dce0da; }
-        #sidebar QPushButton { background: #303c36; border-color: #4a5850; color: #edf1e9; }
-        #sidebar QPushButton:hover { background: #3a4941; }
-        QCheckBox { spacing: 8px; }
-        QCheckBox::indicator { width: 17px; height: 17px; }
-        QCheckBox::indicator:checked { background: #829c42; border: 1px solid #829c42; border-radius: 3px; }
-        QSlider::groove:horizontal { height: 4px; background: #dce1d8; border-radius: 2px; }
-        QSlider::sub-page:horizontal { background: #829c42; border-radius: 2px; }
-        QSlider::handle:horizontal { background: #ffffff; border: 2px solid #829c42; width: 13px; height: 13px; margin: -6px 0; border-radius: 7px; }
-        QScrollArea { background: transparent; border: 0; }
-        QScrollBar:vertical { background: transparent; width: 9px; margin: 0; }
-        QScrollBar::handle:vertical { background: #cbd2c8; border-radius: 4px; min-height: 25px; }
+        QPushButton:hover { background: #35452f; border-color: #667d3d; }
+        QPushButton:pressed { background: #263226; }
+        QPushButton:disabled { color: #69756e; background: #202622; border-color: #303a34; }
+        #sidebar QPushButton { background: #1b2420; border-color: #35423a; color: #dce5df; }
+        #sidebar QPushButton:hover { background: #26312a; }
+        QCheckBox { spacing: 6px; background: transparent; }
+        QCheckBox::indicator { width: 14px; height: 14px; background: #202824; border: 1px solid #536159; border-radius: 2px; }
+        QCheckBox::indicator:checked { background: #9ab84c; border: 1px solid #9ab84c; border-radius: 2px; }
+        QSlider::groove:horizontal { height: 3px; background: #38433d; border-radius: 1px; }
+        QSlider::sub-page:horizontal { background: #9ab84c; border-radius: 1px; }
+        QSlider::handle:horizontal { background: #dce8c5; border: 2px solid #9ab84c; width: 11px; height: 11px; margin: -5px 0; border-radius: 6px; }
+        QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: 0; }
+        QScrollBar:vertical { background: transparent; width: 7px; margin: 0; }
+        QScrollBar::handle:vertical { background: #46534b; border-radius: 3px; min-height: 24px; }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-        #status { color: #657168; padding: 5px 0; }
-        #status[error="true"] { color: #a13c30; }
-        #emptyState { color: #69746c; font-size: 14px; padding: 28px 4px; }
-        QFrame[role="divider"] { background: #e2e6df; max-height: 1px; }
+        QToolTip { color: #e3ebe5; background: #29332d; border: 1px solid #46534b; }
+        #status { color: #92a198; padding: 3px 0; background: transparent; }
+        #status[error="true"] { color: #f08d7e; }
+        #emptyState { color: #91a098; font-size: 12px; padding: 20px 2px; background: transparent; }
+        QFrame[role="divider"] { background: #303a34; max-height: 1px; }
     )");
 
     auto *root = new QWidget(this);
@@ -106,22 +110,22 @@ void MainWindow::buildInterface()
     sidebar->setObjectName("sidebar");
     sidebar->setFixedWidth(252);
     auto *sideLayout = new QVBoxLayout(sidebar);
-    sideLayout->setContentsMargins(22, 25, 22, 22);
-    sideLayout->setSpacing(13);
+    sideLayout->setContentsMargins(16, 18, 14, 14);
+    sideLayout->setSpacing(9);
 
     auto *brand = new QLabel("KAM / KONTROLLER", sidebar);
     brand->setObjectName("brand");
     sideLayout->addWidget(brand);
-    sideLayout->addSpacing(32);
+    sideLayout->addSpacing(14);
     sideLayout->addWidget(makeEyebrow("CONNECTED CAMERAS", sidebar));
 
     devicePicker = new QComboBox(sidebar);
-    devicePicker->setMinimumWidth(200);
+    devicePicker->setMinimumWidth(170);
     sideLayout->addWidget(devicePicker);
 
     auto *refreshButton = new QPushButton("Scan cameras", sidebar);
     sideLayout->addWidget(refreshButton);
-    sideLayout->addSpacing(20);
+    sideLayout->addSpacing(8);
     sideLayout->addWidget(makeEyebrow("DEVICE", sidebar));
     cameraSummary = new QLabel("No camera selected", sidebar);
     cameraSummary->setObjectName("cameraName");
@@ -143,12 +147,12 @@ void MainWindow::buildInterface()
     auto *mainPane = new QWidget(root);
     mainPane->setObjectName("mainPane");
     auto *mainLayout = new QVBoxLayout(mainPane);
-    mainLayout->setContentsMargins(38, 31, 38, 20);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(22, 18, 18, 12);
+    mainLayout->setSpacing(8);
 
     auto *topRow = new QHBoxLayout;
     auto *headingLayout = new QVBoxLayout;
-    headingLayout->setSpacing(5);
+    headingLayout->setSpacing(3);
     headingLayout->addWidget(makeEyebrow("VIDEO INPUT  /  DEVICE SETTINGS", mainPane));
     auto *title = new QLabel("Camera controls", mainPane);
     title->setObjectName("pageTitle");
@@ -158,13 +162,13 @@ void MainWindow::buildInterface()
     auto *resetButton = new QPushButton("Reset defaults", mainPane);
     topRow->addWidget(resetButton, 0, Qt::AlignVCenter);
     mainLayout->addLayout(topRow);
-    mainLayout->addSpacing(10);
+    mainLayout->addSpacing(2);
 
     controlScroll = new QScrollArea(mainPane);
     controlScroll->setWidgetResizable(true);
     controlHost = new QWidget;
     controlLayout = new QVBoxLayout(controlHost);
-    controlLayout->setContentsMargins(0, 0, 8, 0);
+    controlLayout->setContentsMargins(0, 0, 5, 0);
     controlLayout->setSpacing(0);
     emptyState = new QLabel("Select a camera to read its available controls.", controlHost);
     emptyState->setObjectName("emptyState");
@@ -382,7 +386,7 @@ void MainWindow::populateControls(const QList<CameraControl> &controls)
             activeCategory = control.category;
             auto *section = new QLabel(activeCategory.toUpper(), controlHost);
             section->setObjectName("eyebrow");
-            section->setContentsMargins(0, 12, 0, 8);
+            section->setContentsMargins(0, 8, 0, 4);
             controlLayout->addWidget(section);
         }
 
@@ -391,18 +395,18 @@ void MainWindow::populateControls(const QList<CameraControl> &controls)
             || flagText(control.flags, "inactive") || readOnly;
         auto *row = new QWidget(controlHost);
         auto *rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 8, 0, 8);
-        rowLayout->setSpacing(18);
+        rowLayout->setContentsMargins(0, 4, 0, 4);
+        rowLayout->setSpacing(12);
 
         auto *nameLabel = new QLabel(displayName(control.name), row);
-        nameLabel->setMinimumWidth(190);
+        nameLabel->setMinimumWidth(160);
         nameLabel->setStyleSheet("font-weight:600;");
         rowLayout->addWidget(nameLabel);
 
         auto *editorHost = new QWidget(row);
         auto *editorLayout = new QHBoxLayout(editorHost);
         editorLayout->setContentsMargins(0, 0, 0, 0);
-        editorLayout->setSpacing(12);
+        editorLayout->setSpacing(9);
 
         if (control.type == "bool") {
             auto *checkBox = new QCheckBox(editorHost);
