@@ -2,7 +2,6 @@
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -57,11 +56,8 @@ void MainWindow::buildInterface()
     setStyleSheet(R"(
         QWidget { color: #dce5df; background: #151a18; font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 12px; }
         QMainWindow, #mainPane { background: #191f1c; }
-        #sidebar { background: #101513; border-right: 1px solid #29342e; }
-        #sidebar QLabel { color: #dce5df; background: transparent; }
         #brand { color: #c6e36b; font-size: 14px; font-weight: 700; }
         #eyebrow { color: #84958b; font-size: 9px; font-weight: 700; }
-        #sidebar #eyebrow { color: #9baa9f; }
         #pageTitle { color: #edf3ee; font-size: 22px; font-weight: 700; }
         #cameraName { color: #e6eee8; font-size: 13px; font-weight: 700; }
         #cameraPath { color: #91a098; font-family: monospace; font-size: 11px; }
@@ -71,7 +67,6 @@ void MainWindow::buildInterface()
             padding: 4px 7px; min-height: 18px; selection-background-color: #506331;
         }
         QComboBox:focus, QSpinBox:focus, QLineEdit:focus { border-color: #9ab84c; }
-        #sidebar QComboBox { background: #1b2420; color: #e3ebe5; border-color: #35423a; }
         QComboBox::drop-down { background: transparent; border: 0; width: 22px; }
         QComboBox QAbstractItemView { background: #202824; color: #e3ebe5; border: 1px solid #39463f; selection-background-color: #40532c; }
         QSpinBox::up-button, QSpinBox::down-button { background: #29332d; border: 0; width: 15px; }
@@ -82,8 +77,6 @@ void MainWindow::buildInterface()
         QPushButton:hover { background: #35452f; border-color: #667d3d; }
         QPushButton:pressed { background: #263226; }
         QPushButton:disabled { color: #69756e; background: #202622; border-color: #303a34; }
-        #sidebar QPushButton { background: #1b2420; border-color: #35423a; color: #dce5df; }
-        #sidebar QPushButton:hover { background: #26312a; }
         QCheckBox { spacing: 6px; background: transparent; }
         QCheckBox::indicator { width: 14px; height: 14px; background: #202824; border: 1px solid #536159; border-radius: 2px; }
         QCheckBox::indicator:checked { background: #9ab84c; border: 1px solid #9ab84c; border-radius: 2px; }
@@ -106,49 +99,11 @@ void MainWindow::buildInterface()
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto *sidebar = new QWidget(root);
-    sidebar->setObjectName("sidebar");
-    sidebar->setFixedWidth(252);
-    auto *sideLayout = new QVBoxLayout(sidebar);
-    sideLayout->setContentsMargins(16, 18, 14, 14);
-    sideLayout->setSpacing(9);
-
-    auto *brand = new QLabel("KAM / KONTROLLER", sidebar);
-    brand->setObjectName("brand");
-    sideLayout->addWidget(brand);
-    sideLayout->addSpacing(14);
-    sideLayout->addWidget(makeEyebrow("CONNECTED CAMERAS", sidebar));
-
-    devicePicker = new QComboBox(sidebar);
-    devicePicker->setMinimumWidth(170);
-    sideLayout->addWidget(devicePicker);
-
-    auto *refreshButton = new QPushButton("Scan cameras", sidebar);
-    sideLayout->addWidget(refreshButton);
-    sideLayout->addSpacing(8);
-    sideLayout->addWidget(makeEyebrow("DEVICE", sidebar));
-    cameraSummary = new QLabel("No camera selected", sidebar);
-    cameraSummary->setObjectName("cameraName");
-    cameraSummary->setWordWrap(true);
-    sideLayout->addWidget(cameraSummary);
-    auto *pathHint = new QLabel("Control values are read from the selected V4L2 device.", sidebar);
-    pathHint->setWordWrap(true);
-    pathHint->setStyleSheet("color:#a1b0a5; line-height:1.35;");
-    sideLayout->addWidget(pathHint);
-    sideLayout->addStretch();
-
-    auto *utilityLabel = new QLabel(v4l2Executable.isEmpty()
-                                        ? "v4l2-ctl not found"
-                                        : QString("v4l2-ctl  %1").arg(QFileInfo(v4l2Executable).fileName()),
-                                    sidebar);
-    utilityLabel->setStyleSheet("color:#a1b0a5; font-family:monospace; font-size:11px;");
-    sideLayout->addWidget(utilityLabel);
-
     auto *mainPane = new QWidget(root);
     mainPane->setObjectName("mainPane");
     auto *mainLayout = new QVBoxLayout(mainPane);
-    mainLayout->setContentsMargins(22, 18, 18, 12);
-    mainLayout->setSpacing(8);
+    mainLayout->setContentsMargins(24, 18, 20, 12);
+    mainLayout->setSpacing(7);
 
     auto *topRow = new QHBoxLayout;
     auto *headingLayout = new QVBoxLayout;
@@ -162,7 +117,22 @@ void MainWindow::buildInterface()
     auto *resetButton = new QPushButton("Reset defaults", mainPane);
     topRow->addWidget(resetButton, 0, Qt::AlignVCenter);
     mainLayout->addLayout(topRow);
-    mainLayout->addSpacing(2);
+
+    auto *cameraRow = new QHBoxLayout;
+    cameraRow->setSpacing(8);
+    cameraRow->addWidget(makeEyebrow("CONNECTED CAMERA", mainPane));
+    devicePicker = new QComboBox(mainPane);
+    devicePicker->setMinimumWidth(260);
+    devicePicker->setMaximumWidth(420);
+    cameraRow->addWidget(devicePicker);
+    auto *refreshButton = new QPushButton("Scan", mainPane);
+    cameraRow->addWidget(refreshButton);
+    cameraSummary = new QLabel("No device selected", mainPane);
+    cameraSummary->setObjectName("cameraPath");
+    cameraSummary->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    cameraSummary->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    cameraRow->addWidget(cameraSummary, 1);
+    mainLayout->addLayout(cameraRow);
 
     controlScroll = new QScrollArea(mainPane);
     controlScroll->setWidgetResizable(true);
@@ -186,7 +156,6 @@ void MainWindow::buildInterface()
     footer->addWidget(refreshControlsButton);
     mainLayout->addLayout(footer);
 
-    rootLayout->addWidget(sidebar);
     rootLayout->addWidget(mainPane, 1);
     setCentralWidget(root);
 
@@ -287,7 +256,7 @@ void MainWindow::loadControls()
     }
 
     const QString cameraLabel = devicePicker->currentText();
-    cameraSummary->setText(cameraLabel.section("  |  ", 0, 0));
+    cameraSummary->setText(cameraLabel.section("  |  ", 1, 1));
 
     QString output;
     QString error;
