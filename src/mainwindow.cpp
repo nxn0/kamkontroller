@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QProcess>
 #include <QRegularExpression>
@@ -15,6 +16,7 @@
 #include <QStandardPaths>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QWindow>
 #include <limits>
 
 namespace
@@ -46,6 +48,16 @@ MainWindow::MainWindow(QWidget *parent)
 {
     buildInterface();
     scanDevices();
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton && windowHandle()->startSystemMove()) {
+        event->accept();
+        return;
+    }
+
+    QMainWindow::mousePressEvent(event);
 }
 
 void MainWindow::buildInterface()

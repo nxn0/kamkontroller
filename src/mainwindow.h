@@ -6,6 +6,7 @@
 
 class QComboBox;
 class QLabel;
+class QMouseEvent;
 class QScrollArea;
 class QVBoxLayout;
 
@@ -30,6 +31,9 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
     void buildInterface();
