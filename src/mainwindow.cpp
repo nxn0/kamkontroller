@@ -2,11 +2,16 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
+#include <QDir>
+#include <QFileDialog>
+#include <QImage>
+#include <QPixmap>
 #include <QPushButton>
 #include <QProcess>
 #include <QRegularExpression>
@@ -14,6 +19,9 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
+#include <QStyle>
+#include <QTime>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QWindow>
@@ -45,6 +53,7 @@ QLabel *makeEyebrow(const QString &text, QWidget *parent)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       v4l2Executable(QStandardPaths::findExecutable("v4l2-ctl"))
+      , ffmpegExecutable(QStandardPaths::findExecutable("ffmpeg"))
 {
     buildInterface();
     scanDevices();
@@ -62,12 +71,19 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
 void MainWindow::buildInterface()
 {
-    setWindowTitle("KamKontroller | Camera controls");
-    setMinimumSize(700, 460);
-    resize(940, 620);
+    setWindowTitle("KamKontroller | Camera");
+    setMinimumSize(900, 600);
+    resize(1180, 760);
     setStyleSheet(R"(
         QWidget { color: #dce5df; background: #151a18; font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 12px; }
         QMainWindow, #mainPane { background: #191f1c; }
+        #preview { background: #0b0e0d; color: #748078; font-size: 15px; }
+        #overlayPanel { background: rgba(25, 31, 28, 245); border: 1px solid #536149; }
+        #modePicker { font-size: 13px; padding: 8px 12px; }
+        #recordButton { background: #a8473c; color: white; border-color: #d06a5d; padding: 9px 16px; }
+        #recordButton:checked { background: #6d2d29; }
+        #timer { color: #f3d9d3; font-size: 18px; font-weight: 700; background: transparent; }
+        #sideButton { min-width: 116px; padding: 9px 12px; }
         #brand { color: #c6e36b; font-size: 14px; font-weight: 700; }
         #eyebrow { color: #84958b; font-size: 9px; font-weight: 700; }
         #pageTitle { color: #edf3ee; font-size: 22px; font-weight: 700; }
@@ -107,46 +123,91 @@ void MainWindow::buildInterface()
     )");
 
     auto *root = new QWidget(this);
-    auto *rootLayout = new QHBoxLayout(root);
-    rootLayout->setContentsMargins(0, 0, 0, 0);
-    rootLayout->setSpacing(0);
-
     auto *mainPane = new QWidget(root);
     mainPane->setObjectName("mainPane");
     auto *mainLayout = new QVBoxLayout(mainPane);
-    mainLayout->setContentsMargins(24, 18, 20, 12);
-    mainLayout->setSpacing(7);
+    mainLayout->setContentsMargins(18, 14, 18, 12);
+    mainLayout->setSpacing(10);
 
     auto *topRow = new QHBoxLayout;
-    auto *headingLayout = new QVBoxLayout;
-    headingLayout->setSpacing(3);
-    headingLayout->addWidget(makeEyebrow("VIDEO INPUT  /  DEVICE SETTINGS", mainPane));
-    auto *title = new QLabel("Camera controls", mainPane);
-    title->setObjectName("pageTitle");
-    headingLayout->addWidget(title);
-    topRow->addLayout(headingLayout);
-    topRow->addStretch();
-    auto *resetButton = new QPushButton("Reset defaults", mainPane);
-    topRow->addWidget(resetButton, 0, Qt::AlignVCenter);
-    mainLayout->addLayout(topRow);
-
-    auto *cameraRow = new QHBoxLayout;
-    cameraRow->setSpacing(8);
-    cameraRow->addWidget(makeEyebrow("CONNECTED CAMERA", mainPane));
+    auto *brand = new QLabel("KAMKONTROLLER", mainPane);
+    brand->setObjectName("brand");
+    topRow->addWidget(brand);
+    topRow->addSpacing(14);
+    auto *changeButton = new QPushButton("Change camera", mainPane);
+    changeButton->setObjectName("sideButton");
+    topRow->addWidget(changeButton);
+    auto *controlButton = new QPushButton("Controls", mainPane);
+    controlButton->setObjectName("sideButton");
+    topRow->addWidget(controlButton);
+    topRow->addSpacing(12);
     devicePicker = new QComboBox(mainPane);
-    devicePicker->setMinimumWidth(260);
-    devicePicker->setMaximumWidth(420);
-    cameraRow->addWidget(devicePicker);
+    devicePicker->setMinimumWidth(280);
+    topRow->addWidget(devicePicker);
     auto *refreshButton = new QPushButton("Scan", mainPane);
-    cameraRow->addWidget(refreshButton);
+    topRow->addWidget(refreshButton);
     cameraSummary = new QLabel("No device selected", mainPane);
     cameraSummary->setObjectName("cameraPath");
     cameraSummary->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    cameraSummary->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    cameraRow->addWidget(cameraSummary, 1);
-    mainLayout->addLayout(cameraRow);
+    topRow->addWidget(cameraSummary, 1);
+    mainLayout->addLayout(topRow);
 
-    controlScroll = new QScrollArea(mainPane);
+    auto *previewFrame = new QFrame(mainPane);
+    previewFrame->setObjectName("preview");
+    auto *previewLayout = new QVBoxLayout(previewFrame);
+    previewLayout->setContentsMargins(0, 0, 0, 0);
+    previewLabel = new QLabel("Connect a camera to start the live preview", previewFrame);
+    previewLabel->setObjectName("preview");
+    previewLabel->setAlignment(Qt::AlignCenter);
+    previewLabel->setMinimumHeight(360);
+    previewLayout->addWidget(previewLabel);
+    timerLabel = new QLabel("00:00:00", previewFrame);
+    timerLabel->setObjectName("timer");
+    timerLabel->setAlignment(Qt::AlignCenter);
+    timerLabel->hide();
+    previewLayout->addWidget(timerLabel, 0, Qt::AlignCenter);
+    mainLayout->addWidget(previewFrame, 1);
+
+    auto *bottomRow = new QHBoxLayout;
+    modePicker = new QComboBox(mainPane);
+    modePicker->setObjectName("modePicker");
+    modePicker->addItems({"Video", "Camera", "Timelapse"});
+    bottomRow->addWidget(modePicker);
+    recordButton = new QPushButton("Start recording", mainPane);
+    recordButton->setObjectName("recordButton");
+    recordButton->setCheckable(true);
+    bottomRow->addWidget(recordButton);
+    photoButton = new QPushButton("Take photo", mainPane);
+    photoButton->hide();
+    bottomRow->addWidget(photoButton);
+    timelapseButton = new QPushButton("Start timelapse", mainPane);
+    timelapseButton->hide();
+    bottomRow->addWidget(timelapseButton);
+    bottomRow->addStretch();
+    statusLabel = new QLabel("Ready", mainPane);
+    statusLabel->setObjectName("status");
+    bottomRow->addWidget(statusLabel);
+    mainLayout->addLayout(bottomRow);
+
+    controlPanel = new QWidget(mainPane);
+    controlPanel->setObjectName("overlayPanel");
+    controlPanel->setMinimumWidth(430);
+    controlPanel->setMaximumWidth(520);
+    auto *panelLayout = new QVBoxLayout(controlPanel);
+    panelLayout->setContentsMargins(16, 12, 12, 12);
+    auto *panelHeader = new QHBoxLayout;
+    auto *panelTitle = new QLabel("Camera controls", controlPanel);
+    panelTitle->setObjectName("pageTitle");
+    panelHeader->addWidget(panelTitle);
+    panelHeader->addStretch();
+    auto *resetButton = new QPushButton("Reset defaults", controlPanel);
+    panelHeader->addWidget(resetButton);
+    auto *closeButton = new QPushButton("Close", controlPanel);
+    panelHeader->addWidget(closeButton);
+    panelLayout->addLayout(panelHeader);
+    hidePreviewCheck = new QCheckBox("Turn preview off when recording (for low-end devices)", controlPanel);
+    panelLayout->addWidget(hidePreviewCheck);
+    controlScroll = new QScrollArea(controlPanel);
     controlScroll->setWidgetResizable(true);
     controlHost = new QWidget;
     controlLayout = new QVBoxLayout(controlHost);
@@ -157,24 +218,48 @@ void MainWindow::buildInterface()
     emptyState->setWordWrap(true);
     controlLayout->addWidget(emptyState);
     controlScroll->setWidget(controlHost);
-    mainLayout->addWidget(controlScroll, 1);
-
-    auto *footer = new QHBoxLayout;
-    statusLabel = new QLabel("Ready", mainPane);
-    statusLabel->setObjectName("status");
-    footer->addWidget(statusLabel);
-    footer->addStretch();
-    auto *refreshControlsButton = new QPushButton("Refresh controls", mainPane);
-    footer->addWidget(refreshControlsButton);
-    mainLayout->addLayout(footer);
-
+    panelLayout->addWidget(controlScroll, 1);
+    controlPanel->hide();
+    auto *rootLayout = new QHBoxLayout(root);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->addWidget(mainPane, 1);
+    rootLayout->addWidget(controlPanel);
     setCentralWidget(root);
 
+    auto *refreshControlsButton = new QPushButton("Refresh controls", mainPane);
+    refreshControlsButton->hide();
+
     connect(refreshButton, &QPushButton::clicked, this, &MainWindow::scanDevices);
-    connect(devicePicker, &QComboBox::currentIndexChanged, this, [this](int) { loadControls(); });
+    connect(devicePicker, &QComboBox::currentIndexChanged, this, [this](int) { loadControls(); startPreview(); });
     connect(refreshControlsButton, &QPushButton::clicked, this, &MainWindow::loadControls);
     connect(resetButton, &QPushButton::clicked, this, &MainWindow::resetDefaults);
+    connect(controlButton, &QPushButton::clicked, controlPanel, &QWidget::setVisible);
+    connect(closeButton, &QPushButton::clicked, controlPanel, &QWidget::hide);
+    connect(changeButton, &QPushButton::clicked, this, [this] {
+        if (devicePicker->count() > 1)
+            devicePicker->setCurrentIndex((devicePicker->currentIndex() + 1) % devicePicker->count());
+    });
+    connect(recordButton, &QPushButton::clicked, this, &MainWindow::toggleRecording);
+    connect(photoButton, &QPushButton::clicked, this, &MainWindow::capturePhoto);
+    connect(timelapseButton, &QPushButton::clicked, this, [this] {
+        recording ? stopTimelapse() : startTimelapse();
+    });
+    connect(modePicker, &QComboBox::currentTextChanged, this, [this](const QString &mode) {
+        const bool time = mode == "Timelapse";
+        recordButton->setVisible(!time);
+        photoButton->setVisible(mode == "Camera");
+        timelapseButton->setVisible(time);
+    });
+    previewProcess = new QProcess(this);
+    captureProcess = new QProcess(this);
+    recordTimer = new QTimer(this);
+    timelapseTimer = new QTimer(this);
+    recordTimer->setInterval(1000);
+    connect(recordTimer, &QTimer::timeout, this, &MainWindow::updateTimer);
+    connect(timelapseTimer, &QTimer::timeout, this, &MainWindow::capturePhoto);
+    connect(previewProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::updatePreview);
+    connect(captureProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, &MainWindow::finishCaptureProcess);
 }
 
 bool MainWindow::runV4l2(const QStringList &arguments, QString *output, QString *error) const
@@ -212,6 +297,7 @@ void MainWindow::scanDevices()
     QString output;
     QString error;
     if (!runV4l2({"--list-devices"}, &output, &error)) {
+        stopPreview();
         devicePicker->clear();
         cameraSummary->setText("No camera selected");
         setStatus(error, true);
@@ -245,6 +331,7 @@ void MainWindow::scanDevices()
     devicePicker->blockSignals(false);
 
     if (devicePicker->count() == 0) {
+        stopPreview();
         cameraSummary->setText("No camera detected");
         populateControls({});
         setStatus("No V4L2 video devices were found.");
@@ -252,6 +339,7 @@ void MainWindow::scanDevices()
     }
 
     loadControls();
+    startPreview();
 }
 
 QString MainWindow::selectedDevice() const
@@ -527,4 +615,173 @@ void MainWindow::setStatus(const QString &message, bool isError)
     statusLabel->setProperty("error", isError ? "true" : "false");
     statusLabel->style()->unpolish(statusLabel);
     statusLabel->style()->polish(statusLabel);
+}
+
+void MainWindow::startPreview()
+{
+    stopPreview();
+    const QString device = selectedDevice();
+    if (device.isEmpty() || ffmpegExecutable.isEmpty())
+        return;
+    previewBuffer.clear();
+    previewProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
+                                              "-i", device, "-f", "mjpeg", "-q:v", "6", "pipe:1"});
+    if (!previewProcess->waitForStarted(2000))
+        setStatus("Could not start FFmpeg preview: " + previewProcess->errorString(), true);
+}
+
+void MainWindow::stopPreview()
+{
+    if (!previewProcess || previewProcess->state() == QProcess::NotRunning)
+        return;
+    previewProcess->terminate();
+    if (!previewProcess->waitForFinished(1000))
+        previewProcess->kill();
+}
+
+void MainWindow::updatePreview()
+{
+    if (hidePreviewCheck->isChecked() && recording)
+        return;
+    previewBuffer.append(previewProcess->readAllStandardOutput());
+    while (true) {
+        const int start = previewBuffer.indexOf("\xff\xd8");
+        if (start < 0) {
+            if (previewBuffer.size() > 1024 * 1024)
+                previewBuffer.clear();
+            return;
+        }
+        const int end = previewBuffer.indexOf("\xff\xd9", start + 2);
+        if (end < 0) {
+            if (start > 0)
+                previewBuffer.remove(0, start);
+            return;
+        }
+        const QByteArray jpeg = previewBuffer.mid(start, end - start + 2);
+        previewBuffer.remove(0, end + 2);
+        QImage image;
+        if (image.loadFromData(jpeg, "JPEG"))
+            previewLabel->setPixmap(QPixmap::fromImage(image).scaled(previewLabel->size(),
+                                                                       Qt::KeepAspectRatio,
+                                                                       Qt::SmoothTransformation));
+    }
+}
+
+QString MainWindow::outputDirectory() const
+{
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    return directory.isEmpty() ? QDir::homePath() : directory;
+}
+
+QString MainWindow::nextOutputPath(const QString &extension) const
+{
+    QDir().mkpath(outputDirectory());
+    return QDir(outputDirectory()).filePath(
+        QString("kamkontroller_%1.%2").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"), extension));
+}
+
+void MainWindow::toggleRecording()
+{
+    if (recording) {
+        captureProcess->terminate();
+        return;
+    }
+    const QString device = selectedDevice();
+    if (device.isEmpty()) {
+        setStatus("Select a camera before recording.", true);
+        recordButton->setChecked(false);
+        return;
+    }
+    if (ffmpegExecutable.isEmpty()) {
+        setStatus("Could not find ffmpeg. Install FFmpeg and try again.", true);
+        recordButton->setChecked(false);
+        return;
+    }
+    activeOutputPath = nextOutputPath("mp4");
+    captureProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
+                                              "-i", device, "-c:v", "libx264", "-preset", "ultrafast",
+                                              "-pix_fmt", "yuv420p", activeOutputPath});
+    if (!captureProcess->waitForStarted(2000)) {
+        setStatus("Could not start recording: " + captureProcess->errorString(), true);
+        recordButton->setChecked(false);
+        return;
+    }
+    recording = true;
+    recordingStarted = QDateTime::currentDateTime();
+    recordTimer->start();
+    timerLabel->show();
+    if (hidePreviewCheck->isChecked())
+        previewLabel->setText("Preview paused while recording");
+    recordButton->setText("Stop recording");
+    setStatus("Recording to " + activeOutputPath);
+}
+
+void MainWindow::capturePhoto()
+{
+    if (captureProcess->state() != QProcess::NotRunning)
+        return;
+    const QString device = selectedDevice();
+    if (device.isEmpty() || ffmpegExecutable.isEmpty()) {
+        setStatus(ffmpegExecutable.isEmpty() ? "Could not find ffmpeg." : "Select a camera first.", true);
+        return;
+    }
+    activeOutputPath = nextOutputPath("jpg");
+    captureProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
+                                              "-i", device, "-frames:v", "1", "-y", activeOutputPath});
+}
+
+void MainWindow::startTimelapse()
+{
+    if (selectedDevice().isEmpty()) {
+        setStatus("Select a camera before starting a timelapse.", true);
+        return;
+    }
+    recording = true;
+    recordingStarted = QDateTime::currentDateTime();
+    timelapseTimer->start(timelapseSeconds * 1000);
+    timerLabel->show();
+    timelapseButton->setText("Stop timelapse");
+    if (hidePreviewCheck->isChecked())
+        previewLabel->setText("Preview paused during timelapse");
+    capturePhoto();
+    setStatus(QString("Timelapse capture every %1 seconds.").arg(timelapseSeconds));
+}
+
+void MainWindow::stopTimelapse()
+{
+    timelapseTimer->stop();
+    recording = false;
+    timerLabel->hide();
+    timelapseButton->setText("Start timelapse");
+    startPreview();
+    setStatus("Timelapse stopped.");
+}
+
+void MainWindow::updateTimer()
+{
+    if (!recordingStarted.isValid())
+        return;
+    const qint64 seconds = recordingStarted.secsTo(QDateTime::currentDateTime());
+    timerLabel->setText(QTime(0, 0).addSecs(static_cast<int>(seconds)).toString("hh:mm:ss"));
+}
+
+void MainWindow::finishCaptureProcess(int exitCode, QProcess::ExitStatus status)
+{
+    const bool wasRecording = recording && modePicker->currentText() == "Video";
+    if (wasRecording) {
+        recording = false;
+        recordTimer->stop();
+        timerLabel->hide();
+        recordButton->setChecked(false);
+        recordButton->setText("Start recording");
+        startPreview();
+    }
+    if (status != QProcess::NormalExit || exitCode != 0) {
+        setStatus("FFmpeg capture failed: " + QString::fromLocal8Bit(captureProcess->readAllStandardError()).trimmed(), true);
+        return;
+    }
+    if (!activeOutputPath.isEmpty() && !wasRecording)
+        setStatus("Saved " + activeOutputPath);
+    else if (wasRecording)
+        setStatus("Saved " + activeOutputPath);
 }
