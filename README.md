@@ -18,6 +18,8 @@ cmake --build build
 The main screen is the live camera preview. Use **Controls** to open the semi-transparent
 control drawer; its controls and menu values are read from the selected device at runtime.
 **Video**, **Camera**, and **Timelapse** modes use FFmpeg and save files in the user's Movies
-directory. The preview can be disabled while recording from the control drawer for low-end
-devices. Camera permissions are inherited from the user running the application; on Linux,
-that user generally needs access to the `video` device group.
+directory by default. Use **Settings > Default save location...** to choose another folder;
+the choice is persisted between launches. The preview can be disabled while recording from
+the control drawer for low-end devices. Camera permissions are inherited from the user
+running the application; on Linux, that user generally needs access to the `video` device
+group.

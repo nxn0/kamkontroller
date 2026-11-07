@@ -61,6 +61,7 @@ private:
     void updatePreview();
     void updateTimer();
     void finishCaptureProcess(int exitCode, QProcess::ExitStatus status);
+    void chooseDefaultLocation();
     QString outputDirectory() const;
     QString nextOutputPath(const QString &extension) const;
 

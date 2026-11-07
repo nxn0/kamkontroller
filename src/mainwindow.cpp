@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
@@ -7,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QDir>
 #include <QFileDialog>
@@ -14,6 +16,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QProcess>
+#include <QSettings>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QSlider>
@@ -123,6 +126,10 @@ void MainWindow::buildInterface()
     )");
 
     auto *root = new QWidget(this);
+    auto *settingsMenu = menuBar()->addMenu("Settings");
+    auto *locationAction = settingsMenu->addAction("Default save location...");
+    connect(locationAction, &QAction::triggered, this, &MainWindow::chooseDefaultLocation);
+
     auto *mainPane = new QWidget(root);
     mainPane->setObjectName("mainPane");
     auto *mainLayout = new QVBoxLayout(mainPane);
@@ -669,8 +676,25 @@ void MainWindow::updatePreview()
 
 QString MainWindow::outputDirectory() const
 {
-    const QString directory = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    const QSettings settings;
+    const QString configuredDirectory = settings.value("capture/defaultLocation").toString();
+    const QString directory = configuredDirectory.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
+        : configuredDirectory;
     return directory.isEmpty() ? QDir::homePath() : directory;
+}
+
+void MainWindow::chooseDefaultLocation()
+{
+    const QString selected = QFileDialog::getExistingDirectory(
+        this, "Choose default save location", outputDirectory(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (selected.isEmpty())
+        return;
+
+    QSettings settings;
+    settings.setValue("capture/defaultLocation", QDir::cleanPath(selected));
+    setStatus("Default save location set to " + QDir::cleanPath(selected));
 }
 
 QString MainWindow::nextOutputPath(const QString &extension) const
