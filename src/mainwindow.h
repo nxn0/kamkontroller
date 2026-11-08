@@ -10,10 +10,13 @@
 
 class QComboBox;
 class QCheckBox;
+class QDialog;
 class QLabel;
 class QMouseEvent;
+class QPlainTextEdit;
 class QPushButton;
 class QScrollArea;
+class QToolButton;
 class QTimer;
 class QVBoxLayout;
 
@@ -63,6 +66,8 @@ private:
     void updatePreview();
     void updateTimer();
     void finishCaptureProcess(int exitCode, QProcess::ExitStatus status);
+    void appendCaptureLog(const QByteArray &output);
+    void requestCaptureStop();
     void chooseDefaultLocation();
     QString outputDirectory(const QString &category, QString *error = nullptr) const;
     QString nextOutputPath(const QString &extension, const QString &category, QString *error = nullptr) const;
@@ -72,6 +77,8 @@ private:
     QLabel *previewLabel = nullptr;
     QLabel *timerLabel = nullptr;
     QLabel *statusLabel = nullptr;
+    QDialog *logsDialog = nullptr;
+    QPlainTextEdit *logsView = nullptr;
     QLabel *emptyState = nullptr;
     QScrollArea *controlScroll = nullptr;
     QWidget *controlHost = nullptr;

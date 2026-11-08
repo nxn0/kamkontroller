@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDialog>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -17,6 +18,7 @@
 #include <QImage>
 #include <QPixmap>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QProcess>
 #include <QSettings>
 #include <QRegularExpression>
@@ -27,6 +29,8 @@
 #include <QStyle>
 #include <QTime>
 #include <QTimer>
+#include <QToolButton>
+#include <QTextCursor>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QWindow>
@@ -196,7 +200,25 @@ void MainWindow::buildInterface()
     statusLabel = new QLabel("Ready", mainPane);
     statusLabel->setObjectName("status");
     bottomRow->addWidget(statusLabel);
+    auto *logsButton = new QToolButton(mainPane);
+    logsButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogInfoView));
+    logsButton->setToolTip("Show FFmpeg logs");
+    logsButton->setAccessibleName("Show FFmpeg logs");
+    bottomRow->addWidget(logsButton);
     mainLayout->addLayout(bottomRow);
+
+    logsDialog = new QDialog(this);
+    logsDialog->setWindowTitle("FFmpeg Logs");
+    logsDialog->resize(640, 360);
+    auto *logsLayout = new QVBoxLayout(logsDialog);
+    logsView = new QPlainTextEdit(logsDialog);
+    logsView->setReadOnly(true);
+    logsLayout->addWidget(logsView);
+    connect(logsButton, &QToolButton::clicked, this, [this] {
+        logsDialog->show();
+        logsDialog->raise();
+        logsDialog->activateWindow();
+    });
 
     controlPanel = new QWidget(mainPane);
     controlPanel->setObjectName("overlayPanel");
@@ -265,6 +287,12 @@ void MainWindow::buildInterface()
     connect(previewProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::updatePreview);
     connect(captureProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &MainWindow::finishCaptureProcess);
+    connect(captureProcess, &QProcess::readyReadStandardError, this, [this] {
+        appendCaptureLog(captureProcess->readAllStandardError());
+    });
+    connect(captureProcess, &QProcess::readyReadStandardOutput, this, [this] {
+        appendCaptureLog(captureProcess->readAllStandardOutput());
+    });
 }
 
 bool MainWindow::runV4l2(const QStringList &arguments, QString *output, QString *error) const
@@ -745,7 +773,7 @@ QString MainWindow::nextOutputPath(const QString &extension, const QString &cate
 void MainWindow::toggleRecording()
 {
     if (recording) {
-        captureProcess->terminate();
+        requestCaptureStop();
         return;
     }
     const QString device = selectedDevice();
@@ -764,6 +792,7 @@ void MainWindow::toggleRecording()
         recordButton->setChecked(false);
         return;
     }
+    logsView->clear();
     QString pathError;
     activeOutputPath = nextOutputPath("mp4", "videos", &pathError);
     if (activeOutputPath.isEmpty()) {
@@ -805,6 +834,7 @@ void MainWindow::capturePhoto()
         setStatus(pathError, true);
         return;
     }
+    logsView->clear();
     pausePreview();
     captureProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
                                               "-i", device, "-frames:v", "1", "-y", activeOutputPath});
@@ -830,6 +860,7 @@ void MainWindow::startTimelapse()
         setStatus("Wait for the current capture to finish before starting a timelapse.", true);
         return;
     }
+    logsView->clear();
     QString pathError;
     activeOutputPath = nextOutputPath("mp4", "timelapse", &pathError);
     if (activeOutputPath.isEmpty()) {
@@ -857,8 +888,28 @@ void MainWindow::startTimelapse()
 
 void MainWindow::stopTimelapse()
 {
-    captureProcess->terminate();
+    requestCaptureStop();
     setStatus("Stopping timelapse...");
+}
+
+void MainWindow::requestCaptureStop()
+{
+    if (captureProcess->state() == QProcess::NotRunning)
+        return;
+    captureProcess->write("q\n");
+    QTimer::singleShot(3000, captureProcess, [this] {
+        if (captureProcess->state() != QProcess::NotRunning)
+            captureProcess->kill();
+    });
+}
+
+void MainWindow::appendCaptureLog(const QByteArray &output)
+{
+    if (output.isEmpty())
+        return;
+    logsView->moveCursor(QTextCursor::End);
+    logsView->insertPlainText(QString::fromLocal8Bit(output));
+    logsView->ensureCursorVisible();
 }
 
 void MainWindow::updateTimer()
@@ -871,6 +922,8 @@ void MainWindow::updateTimer()
 
 void MainWindow::finishCaptureProcess(int exitCode, QProcess::ExitStatus status)
 {
+    appendCaptureLog(captureProcess->readAllStandardOutput());
+    appendCaptureLog(captureProcess->readAllStandardError());
     const bool wasVideoRecording = recording && modePicker->currentText() == "Video";
     const bool wasTimelapse = recording && modePicker->currentText() == "Timelapse";
     if (wasVideoRecording || wasTimelapse) {
@@ -888,7 +941,10 @@ void MainWindow::finishCaptureProcess(int exitCode, QProcess::ExitStatus status)
     if (wasVideoRecording || wasTimelapse || !recording)
         resumePreview();
     if (status != QProcess::NormalExit || exitCode != 0) {
-        setStatus("FFmpeg capture failed: " + QString::fromLocal8Bit(captureProcess->readAllStandardError()).trimmed(), true);
+        const QString details = QString::fromLocal8Bit(captureProcess->readAllStandardError()).trimmed();
+        setStatus(details.isEmpty()
+                      ? QString("FFmpeg capture failed (exit code %1). ").arg(exitCode) + activeOutputPath
+                      : "FFmpeg capture failed. See logs for details.", true);
         return;
     }
     if (!activeOutputPath.isEmpty())
