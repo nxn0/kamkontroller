@@ -54,6 +54,8 @@ private:
     void resetDefaults();
     void startPreview();
     void stopPreview();
+    void pausePreview();
+    void resumePreview();
     void toggleRecording();
     void capturePhoto();
     void startTimelapse();
@@ -62,8 +64,8 @@ private:
     void updateTimer();
     void finishCaptureProcess(int exitCode, QProcess::ExitStatus status);
     void chooseDefaultLocation();
-    QString outputDirectory() const;
-    QString nextOutputPath(const QString &extension) const;
+    QString outputDirectory(const QString &category, QString *error = nullptr) const;
+    QString nextOutputPath(const QString &extension, const QString &category, QString *error = nullptr) const;
 
     QComboBox *devicePicker = nullptr;
     QLabel *cameraSummary = nullptr;
@@ -79,15 +81,12 @@ private:
     QPushButton *recordButton = nullptr;
     QPushButton *photoButton = nullptr;
     QPushButton *timelapseButton = nullptr;
-    QCheckBox *hidePreviewCheck = nullptr;
     QProcess *previewProcess = nullptr;
     QProcess *captureProcess = nullptr;
     QTimer *recordTimer = nullptr;
-    QTimer *timelapseTimer = nullptr;
     QByteArray previewBuffer;
     QString activeOutputPath;
     QDateTime recordingStarted;
-    int timelapseSeconds = 5;
     bool recording = false;
     QString v4l2Executable;
     QString ffmpegExecutable;

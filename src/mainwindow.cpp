@@ -12,6 +12,8 @@
 #include <QMouseEvent>
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QGraphicsBlurEffect>
 #include <QImage>
 #include <QPixmap>
 #include <QPushButton>
@@ -212,8 +214,6 @@ void MainWindow::buildInterface()
     auto *closeButton = new QPushButton("Close", controlPanel);
     panelHeader->addWidget(closeButton);
     panelLayout->addLayout(panelHeader);
-    hidePreviewCheck = new QCheckBox("Turn preview off when recording (for low-end devices)", controlPanel);
-    panelLayout->addWidget(hidePreviewCheck);
     controlScroll = new QScrollArea(controlPanel);
     controlScroll->setWidgetResizable(true);
     controlHost = new QWidget;
@@ -260,10 +260,8 @@ void MainWindow::buildInterface()
     previewProcess = new QProcess(this);
     captureProcess = new QProcess(this);
     recordTimer = new QTimer(this);
-    timelapseTimer = new QTimer(this);
     recordTimer->setInterval(1000);
     connect(recordTimer, &QTimer::timeout, this, &MainWindow::updateTimer);
-    connect(timelapseTimer, &QTimer::timeout, this, &MainWindow::capturePhoto);
     connect(previewProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::updatePreview);
     connect(captureProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &MainWindow::finishCaptureProcess);
@@ -642,14 +640,38 @@ void MainWindow::stopPreview()
     if (!previewProcess || previewProcess->state() == QProcess::NotRunning)
         return;
     previewProcess->terminate();
-    if (!previewProcess->waitForFinished(1000))
+    if (!previewProcess->waitForFinished(1000)) {
         previewProcess->kill();
+        previewProcess->waitForFinished();
+    }
+}
+
+void MainWindow::pausePreview()
+{
+    stopPreview();
+    if (previewLabel->pixmap().isNull()) {
+        previewLabel->setText("Camera preview paused");
+        return;
+    }
+
+    if (!previewLabel->graphicsEffect()) {
+        auto *blur = new QGraphicsBlurEffect;
+        blur->setBlurRadius(12);
+        previewLabel->setGraphicsEffect(blur);
+    }
+}
+
+void MainWindow::resumePreview()
+{
+    if (previewLabel->graphicsEffect())
+        previewLabel->setGraphicsEffect(nullptr);
+    if (previewLabel->pixmap().isNull())
+        previewLabel->setText("Reconnecting to camera preview...");
+    startPreview();
 }
 
 void MainWindow::updatePreview()
 {
-    if (hidePreviewCheck->isChecked() && recording)
-        return;
     previewBuffer.append(previewProcess->readAllStandardOutput());
     while (true) {
         const int start = previewBuffer.indexOf("\xff\xd8");
@@ -674,33 +696,49 @@ void MainWindow::updatePreview()
     }
 }
 
-QString MainWindow::outputDirectory() const
+QString MainWindow::outputDirectory(const QString &category, QString *error) const
 {
     const QSettings settings;
     const QString configuredDirectory = settings.value("capture/defaultLocation").toString();
     const QString directory = configuredDirectory.isEmpty()
-        ? QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
+        ? QDir::home().filePath("kamkontroller/" + category)
         : configuredDirectory;
-    return directory.isEmpty() ? QDir::homePath() : directory;
+    if (!QDir().mkpath(directory) || !QDir(directory).exists()) {
+        if (error)
+            *error = "Could not create output directory: " + directory;
+        return {};
+    }
+    if (!QFileInfo(directory).isWritable()) {
+        if (error)
+            *error = "Output directory is not writable: " + directory;
+        return {};
+    }
+    return QDir::cleanPath(directory);
 }
 
 void MainWindow::chooseDefaultLocation()
 {
+    QSettings settings;
+    const QString configuredDirectory = settings.value("capture/defaultLocation").toString();
+    const QString initialDirectory = configuredDirectory.isEmpty()
+        ? QDir::home().filePath("kamkontroller")
+        : configuredDirectory;
     const QString selected = QFileDialog::getExistingDirectory(
-        this, "Choose default save location", outputDirectory(),
+        this, "Choose default save location", initialDirectory,
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (selected.isEmpty())
         return;
 
-    QSettings settings;
     settings.setValue("capture/defaultLocation", QDir::cleanPath(selected));
     setStatus("Default save location set to " + QDir::cleanPath(selected));
 }
 
-QString MainWindow::nextOutputPath(const QString &extension) const
+QString MainWindow::nextOutputPath(const QString &extension, const QString &category, QString *error) const
 {
-    QDir().mkpath(outputDirectory());
-    return QDir(outputDirectory()).filePath(
+    const QString directory = outputDirectory(category, error);
+    if (directory.isEmpty())
+        return {};
+    return QDir(directory).filePath(
         QString("kamkontroller_%1.%2").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"), extension));
 }
 
@@ -716,26 +754,38 @@ void MainWindow::toggleRecording()
         recordButton->setChecked(false);
         return;
     }
+    if (captureProcess->state() != QProcess::NotRunning) {
+        setStatus("Wait for the current capture to finish before recording.", true);
+        recordButton->setChecked(false);
+        return;
+    }
     if (ffmpegExecutable.isEmpty()) {
         setStatus("Could not find ffmpeg. Install FFmpeg and try again.", true);
         recordButton->setChecked(false);
         return;
     }
-    activeOutputPath = nextOutputPath("mp4");
+    QString pathError;
+    activeOutputPath = nextOutputPath("mp4", "videos", &pathError);
+    if (activeOutputPath.isEmpty()) {
+        setStatus(pathError, true);
+        recordButton->setChecked(false);
+        return;
+    }
+    pausePreview();
     captureProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
                                               "-i", device, "-c:v", "libx264", "-preset", "ultrafast",
                                               "-pix_fmt", "yuv420p", activeOutputPath});
     if (!captureProcess->waitForStarted(2000)) {
         setStatus("Could not start recording: " + captureProcess->errorString(), true);
         recordButton->setChecked(false);
+        resumePreview();
         return;
     }
     recording = true;
     recordingStarted = QDateTime::currentDateTime();
+    modePicker->setEnabled(false);
     recordTimer->start();
     timerLabel->show();
-    if (hidePreviewCheck->isChecked())
-        previewLabel->setText("Preview paused while recording");
     recordButton->setText("Stop recording");
     setStatus("Recording to " + activeOutputPath);
 }
@@ -749,36 +799,66 @@ void MainWindow::capturePhoto()
         setStatus(ffmpegExecutable.isEmpty() ? "Could not find ffmpeg." : "Select a camera first.", true);
         return;
     }
-    activeOutputPath = nextOutputPath("jpg");
+    QString pathError;
+    activeOutputPath = nextOutputPath("jpg", "pictures", &pathError);
+    if (activeOutputPath.isEmpty()) {
+        setStatus(pathError, true);
+        return;
+    }
+    pausePreview();
     captureProcess->start(ffmpegExecutable, {"-hide_banner", "-loglevel", "error", "-f", "v4l2",
                                               "-i", device, "-frames:v", "1", "-y", activeOutputPath});
+    if (!captureProcess->waitForStarted(2000)) {
+        setStatus("Could not capture photo: " + captureProcess->errorString(), true);
+        if (!(recording && modePicker->currentText() == "Timelapse"))
+            resumePreview();
+    }
 }
 
 void MainWindow::startTimelapse()
 {
-    if (selectedDevice().isEmpty()) {
+    const QString device = selectedDevice();
+    if (device.isEmpty()) {
         setStatus("Select a camera before starting a timelapse.", true);
+        return;
+    }
+    if (ffmpegExecutable.isEmpty()) {
+        setStatus("Could not find ffmpeg. Install FFmpeg and try again.", true);
+        return;
+    }
+    if (captureProcess->state() != QProcess::NotRunning) {
+        setStatus("Wait for the current capture to finish before starting a timelapse.", true);
+        return;
+    }
+    QString pathError;
+    activeOutputPath = nextOutputPath("mp4", "timelapse", &pathError);
+    if (activeOutputPath.isEmpty()) {
+        setStatus(pathError, true);
+        return;
+    }
+    pausePreview();
+    captureProcess->start(ffmpegExecutable, {"-f", "v4l2", "-i", device,
+                                              "-vf", "fps=24,setpts=N/1920/TB",
+                                              "-c:v", "libx264", "-preset", "fast",
+                                              "-crf", "23", "-t", "75600", activeOutputPath});
+    if (!captureProcess->waitForStarted(2000)) {
+        setStatus("Could not start timelapse: " + captureProcess->errorString(), true);
+        resumePreview();
         return;
     }
     recording = true;
     recordingStarted = QDateTime::currentDateTime();
-    timelapseTimer->start(timelapseSeconds * 1000);
+    modePicker->setEnabled(false);
+    recordTimer->start();
     timerLabel->show();
     timelapseButton->setText("Stop timelapse");
-    if (hidePreviewCheck->isChecked())
-        previewLabel->setText("Preview paused during timelapse");
-    capturePhoto();
-    setStatus(QString("Timelapse capture every %1 seconds.").arg(timelapseSeconds));
+    setStatus("Recording timelapse to " + activeOutputPath);
 }
 
 void MainWindow::stopTimelapse()
 {
-    timelapseTimer->stop();
-    recording = false;
-    timerLabel->hide();
-    timelapseButton->setText("Start timelapse");
-    startPreview();
-    setStatus("Timelapse stopped.");
+    captureProcess->terminate();
+    setStatus("Stopping timelapse...");
 }
 
 void MainWindow::updateTimer()
@@ -791,21 +871,26 @@ void MainWindow::updateTimer()
 
 void MainWindow::finishCaptureProcess(int exitCode, QProcess::ExitStatus status)
 {
-    const bool wasRecording = recording && modePicker->currentText() == "Video";
-    if (wasRecording) {
+    const bool wasVideoRecording = recording && modePicker->currentText() == "Video";
+    const bool wasTimelapse = recording && modePicker->currentText() == "Timelapse";
+    if (wasVideoRecording || wasTimelapse) {
         recording = false;
         recordTimer->stop();
         timerLabel->hide();
-        recordButton->setChecked(false);
-        recordButton->setText("Start recording");
-        startPreview();
+        modePicker->setEnabled(true);
+        if (wasVideoRecording) {
+            recordButton->setChecked(false);
+            recordButton->setText("Start recording");
+        }
+        if (wasTimelapse)
+            timelapseButton->setText("Start timelapse");
     }
+    if (wasVideoRecording || wasTimelapse || !recording)
+        resumePreview();
     if (status != QProcess::NormalExit || exitCode != 0) {
         setStatus("FFmpeg capture failed: " + QString::fromLocal8Bit(captureProcess->readAllStandardError()).trimmed(), true);
         return;
     }
-    if (!activeOutputPath.isEmpty() && !wasRecording)
-        setStatus("Saved " + activeOutputPath);
-    else if (wasRecording)
+    if (!activeOutputPath.isEmpty())
         setStatus("Saved " + activeOutputPath);
 }
